@@ -2,15 +2,20 @@
 
 import { useState } from "react";
 import AppShell from "@/components/AppShell";
+import TransactionModal from "@/components/TransactionModal";
 import { MOCK_TRANSACTIONS, formatCurrency } from "@/utils/constants";
+import type { Transaction } from "@/types";
 
 type FilterType = "all" | "income" | "expense";
 
 export default function TransactionsPage() {
+  const [transactions, setTransactions] =
+    useState<Transaction[]>(MOCK_TRANSACTIONS);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [filter, setFilter] = useState<FilterType>("all");
   const [currentPage, setCurrentPage] = useState(1);
 
-  const filtered = MOCK_TRANSACTIONS.filter((tx) => {
+  const filtered = transactions.filter((tx) => {
     if (filter === "all") return true;
     return tx.type === filter;
   });
@@ -21,6 +26,11 @@ export default function TransactionsPage() {
     (currentPage - 1) * perPage,
     currentPage * perPage
   );
+
+  function handleAddTransaction(tx: Transaction) {
+    setTransactions((prev) => [tx, ...prev]);
+    setCurrentPage(1);
+  }
 
   return (
     <AppShell>
@@ -35,7 +45,10 @@ export default function TransactionsPage() {
               Manage and track your financial activity.
             </p>
           </div>
-          <button className="bg-primary text-on-primary hover:bg-surface-tint font-label-md text-label-md py-2 px-4 rounded-lg flex items-center justify-center gap-sm transition-colors shadow-sm whitespace-nowrap">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="bg-primary text-on-primary hover:bg-surface-tint font-label-md text-label-md py-2 px-4 rounded-lg flex items-center justify-center gap-sm transition-colors shadow-sm whitespace-nowrap"
+          >
             <span className="material-symbols-outlined text-sm">add</span>
             Add Transaction
           </button>
@@ -227,6 +240,13 @@ export default function TransactionsPage() {
             </div>
           </div>
         </div>
+
+        {showAddModal && (
+          <TransactionModal
+            onClose={() => setShowAddModal(false)}
+            onAdd={handleAddTransaction}
+          />
+        )}
       </div>
     </AppShell>
   );

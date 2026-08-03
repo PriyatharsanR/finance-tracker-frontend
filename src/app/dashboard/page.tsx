@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
+import TransactionModal from "@/components/TransactionModal";
 import {
   MOCK_TRANSACTIONS,
   EXPENSE_CATEGORIES,
@@ -10,9 +12,18 @@ import {
   CHART_EXPENSE,
   formatCurrency,
 } from "@/utils/constants";
+import type { Transaction } from "@/types";
 
 export default function DashboardPage() {
-  const topTransactions = MOCK_TRANSACTIONS.slice(0, 5);
+  const [transactions, setTransactions] =
+    useState<Transaction[]>(MOCK_TRANSACTIONS);
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  const topTransactions = transactions.slice(0, 5);
+
+  function handleAddTransaction(tx: Transaction) {
+    setTransactions((prev) => [tx, ...prev]);
+  }
 
   return (
     <AppShell>
@@ -27,7 +38,10 @@ export default function DashboardPage() {
               Here&apos;s your financial summary for October 2023.
             </p>
           </div>
-          <button className="bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md px-md py-2 rounded-lg shadow-sm transition-colors flex items-center gap-sm">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md px-md py-2 rounded-lg shadow-sm transition-colors flex items-center gap-sm"
+          >
             <span className="material-symbols-outlined text-[18px]">add</span>
             New Transaction
           </button>
@@ -370,6 +384,13 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {showAddModal && (
+        <TransactionModal
+          onClose={() => setShowAddModal(false)}
+          onAdd={handleAddTransaction}
+        />
+      )}
     </AppShell>
   );
 }
