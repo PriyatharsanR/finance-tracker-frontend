@@ -1,17 +1,77 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
-import { MONTHLY_REPORTS, formatCurrency } from "@/utils/constants";
+import {
+  MONTHLY_REPORTS,
+  formatCurrencyShort,
+} from "@/utils/constants";
 
-const YEARS = ["2023", "2022", "2021"];
+const YEARS = Object.keys(MONTHLY_REPORTS).sort((a, b) => b.localeCompare(a));
+const CHART_WIDTH = 800;
+const CHART_HEIGHT = 300;
+const CHART_X_MIN = 80;
+const CHART_X_MAX = 770;
+const CHART_Y_MIN = 30;
+const CHART_Y_MAX = 280;
+
+function buildSmoothPath(points: { x: number; y: number }[]) {
+  if (points.length === 0) return "";
+  let d = `M ${points[0].x},${points[0].y}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i];
+    const p1 = points[i + 1];
+    const mx = (p0.x + p1.x) / 2;
+    d += ` C ${mx},${p0.y} ${mx},${p1.y} ${p1.x},${p1.y}`;
+  }
+  return d;
+}
 
 export default function ReportsPage() {
-  const [selectedYear, setSelectedYear] = useState("2023");
+  const [selectedYear, setSelectedYear] = useState(YEARS[0] ?? "2023");
 
-  const totalIncome = MONTHLY_REPORTS.reduce((s, m) => s + m.income, 0);
-  const totalExpense = MONTHLY_REPORTS.reduce((s, m) => s + m.expense, 0);
+  const monthly = useMemo(
+    () => MONTHLY_REPORTS[selectedYear] ?? [],
+    [selectedYear]
+  );
+
+  const totalIncome = monthly.reduce((s, m) => s + m.income, 0);
+  const totalExpense = monthly.reduce((s, m) => s + m.expense, 0);
   const netIncome = totalIncome - totalExpense;
+
+  const chart = useMemo(() => {
+    const nets = monthly.map((m) => m.income - m.expense);
+    const maxNet = Math.max(Math.ceil(Math.max(...nets, 1) / 1000) * 1000, 1);
+    const yFor = (v: number) =>
+      CHART_Y_MAX - (v / maxNet) * (CHART_Y_MAX - CHART_Y_MIN);
+
+    const step = (CHART_X_MAX - CHART_X_MIN) / Math.max(nets.length - 1, 1);
+    const points = nets.map((net, i) => ({
+      x: CHART_X_MIN + i * step,
+      y: yFor(net),
+    }));
+
+    const gridValues = [maxNet, maxNet * 0.75, maxNet * 0.5, maxNet * 0.25, 0];
+
+    const labelIndexes = [0, 2, 4, 6, 8, 10, 11].filter(
+      (i) => i < points.length
+    );
+
+    return {
+      nets,
+      maxNet,
+      points,
+      gridValues,
+      labelIndexes,
+      linePath: buildSmoothPath(points),
+      areaPath:
+        points.length > 1
+          ? `${buildSmoothPath(points)} L ${
+              points[points.length - 1].x
+            },${CHART_Y_MAX} L ${points[0].x},${CHART_Y_MAX} Z`
+          : "",
+    };
+  }, [monthly]);
 
   return (
     <AppShell>
@@ -23,7 +83,7 @@ export default function ReportsPage() {
               Annual Overview
             </h1>
             <p className="text-body-md font-body-md text-on-surface-variant mt-1">
-              Comprehensive breakdown of income and expenses.
+              Comprehensive breakdown of income and expenses for {selectedYear}.
             </p>
           </div>
           <div className="flex items-center gap-sm bg-surface dark:bg-surface-container-high p-1 rounded-lg border border-outline-variant">
@@ -113,7 +173,7 @@ export default function ReportsPage() {
         <div className="bg-surface dark:bg-surface-container-lowest p-md md:p-lg rounded-xl border border-outline-variant shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)]">
           <div className="flex justify-between items-center mb-lg">
             <h3 className="text-headline-md font-headline-md text-on-surface dark:text-on-secondary">
-              Net Income Trend
+              Net Income Trend {selectedYear}
             </h3>
             <button className="flex items-center gap-xs text-primary dark:text-inverse-primary text-label-sm font-label-sm hover:underline">
               <span className="material-symbols-outlined text-sm">
@@ -148,100 +208,37 @@ export default function ReportsPage() {
                   />
                 </linearGradient>
               </defs>
-              {/* Grid Lines */}
-              <line
-                className="stroke-outline-variant stroke-1 opacity-50"
-                style={{ strokeDasharray: "4" }}
-                x1="50"
-                x2="780"
-                y1="20"
-                y2="20"
-              />
-              <line
-                className="stroke-outline-variant stroke-1 opacity-50"
-                style={{ strokeDasharray: "4" }}
-                x1="50"
-                x2="780"
-                y1="85"
-                y2="85"
-              />
-              <line
-                className="stroke-outline-variant stroke-1 opacity-50"
-                style={{ strokeDasharray: "4" }}
-                x1="50"
-                x2="780"
-                y1="150"
-                y2="150"
-              />
-              <line
-                className="stroke-outline-variant stroke-1 opacity-50"
-                style={{ strokeDasharray: "4" }}
-                x1="50"
-                x2="780"
-                y1="215"
-                y2="215"
-              />
-              <line
-                className="stroke-outline-variant stroke-1"
-                x1="50"
-                x2="780"
-                y1="280"
-                y2="280"
-              />
-              {/* Y-Axis Labels */}
-              <text
-                className="fill-on-surface-variant"
-                style={{
-                  fontFamily: "Geist, sans-serif",
-                  fontSize: "12px",
-                }}
-                textAnchor="end"
-                x="40"
-                y="25"
-              >
-                $15k
-              </text>
-              <text
-                className="fill-on-surface-variant"
-                style={{
-                  fontFamily: "Geist, sans-serif",
-                  fontSize: "12px",
-                }}
-                textAnchor="end"
-                x="40"
-                y="90"
-              >
-                $10k
-              </text>
-              <text
-                className="fill-on-surface-variant"
-                style={{
-                  fontFamily: "Geist, sans-serif",
-                  fontSize: "12px",
-                }}
-                textAnchor="end"
-                x="40"
-                y="155"
-              >
-                $5k
-              </text>
-              <text
-                className="fill-on-surface-variant"
-                style={{
-                  fontFamily: "Geist, sans-serif",
-                  fontSize: "12px",
-                }}
-                textAnchor="end"
-                x="40"
-                y="220"
-              >
-                $0
-              </text>
+              {/* Grid Lines & Y-Axis Labels */}
+              {chart.gridValues.map((value, i) => {
+                const y = CHART_Y_MIN + (i * (CHART_Y_MAX - CHART_Y_MIN)) / 4;
+                const isLast = i === chart.gridValues.length - 1;
+                return (
+                  <g key={`grid-${i}`}>
+                    <line
+                      className="stroke-outline-variant opacity-50"
+                      style={{ strokeDasharray: isLast ? undefined : "4" }}
+                      x1="50"
+                      x2="780"
+                      y1={y}
+                      y2={y}
+                    />
+                    <text
+                      className="fill-on-surface-variant"
+                      style={{
+                        fontFamily: "Geist, sans-serif",
+                        fontSize: "12px",
+                      }}
+                      textAnchor="end"
+                      x="40"
+                      y={y + 4}
+                    >
+                      {value === 0 ? "$0" : formatCurrencyShort(value)}
+                    </text>
+                  </g>
+                );
+              })}
               {/* Area Path */}
-              <path
-                fill="url(#primary-gradient)"
-                d="M 80,280 L 80,180 C 130,170 150,110 200,90 C 250,70 270,140 320,130 C 370,120 390,50 440,40 C 490,30 510,100 560,90 C 610,80 630,160 680,150 C 730,140 750,80 770,70 L 770,280 Z"
-              />
+              <path fill="url(#primary-gradient)" d={chart.areaPath} />
               {/* Line Path */}
               <path
                 fill="none"
@@ -249,22 +246,14 @@ export default function ReportsPage() {
                 strokeWidth="3"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                d="M 80,180 C 130,170 150,110 200,90 C 250,70 270,140 320,130 C 370,120 390,50 440,40 C 490,30 510,100 560,90 C 610,80 630,160 680,150 C 730,140 750,80 770,70"
+                d={chart.linePath}
               />
               {/* Data Points & X-Axis Labels */}
-              {[
-                { cx: 80, cy: 180, label: "Jan" },
-                { cx: 200, cy: 90, label: "Mar" },
-                { cx: 320, cy: 130, label: "May" },
-                { cx: 440, cy: 40, label: "Jul" },
-                { cx: 560, cy: 90, label: "Sep" },
-                { cx: 680, cy: 150, label: "Nov" },
-                { cx: 770, cy: 70, label: "Dec" },
-              ].map((pt) => (
-                <g key={pt.label}>
+              {chart.labelIndexes.map((i) => (
+                <g key={i}>
                   <circle
-                    cx={pt.cx}
-                    cy={pt.cy}
+                    cx={chart.points[i].x}
+                    cy={chart.points[i].y}
                     r="4"
                     fill="var(--color-surface)"
                     stroke="var(--color-primary)"
@@ -277,10 +266,10 @@ export default function ReportsPage() {
                       fontSize: "12px",
                     }}
                     textAnchor="middle"
-                    x={pt.cx}
+                    x={chart.points[i].x}
                     y="295"
                   >
-                    {pt.label}
+                    {monthly[i]?.month.slice(0, 3)}
                   </text>
                 </g>
               ))}
@@ -292,7 +281,7 @@ export default function ReportsPage() {
         <div className="bg-surface dark:bg-surface-container-lowest rounded-xl border border-outline-variant shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] overflow-hidden">
           <div className="p-md md:p-lg border-b border-outline-variant bg-surface-container-lowest dark:bg-surface-container-low">
             <h3 className="text-headline-md font-headline-md text-on-surface dark:text-on-secondary">
-              Monthly Breakdown
+              Monthly Breakdown {selectedYear}
             </h3>
           </div>
           <div className="overflow-x-auto">
@@ -312,7 +301,7 @@ export default function ReportsPage() {
                 </tr>
               </thead>
               <tbody className="text-body-md font-body-md text-on-surface dark:text-on-secondary">
-                {MONTHLY_REPORTS.map((row) => (
+                {monthly.map((row) => (
                   <tr
                     key={row.month}
                     className="border-b border-surface-container dark:border-outline-variant/30 hover:bg-surface-bright/50 dark:hover:bg-surface-variant/20 transition-colors"
