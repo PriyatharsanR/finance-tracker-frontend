@@ -140,13 +140,52 @@ export const EXPENSE_CATEGORIES = [
   { name: "Fun", percent: 5, color: "#adc6ff" },
 ];
 
-export const MONTHLY_REPORTS = [
-  { month: "January", income: 11200, expense: 6400 },
-  { month: "February", income: 10800, expense: 5900 },
-  { month: "March", income: 15500, expense: 7200 },
-  { month: "April", income: 12100, expense: 6100 },
-  { month: "May", income: 14300, expense: 8500 },
-];
+export type MonthlyReport = { month: string; income: number; expense: number };
+
+export const MONTHLY_REPORTS: Record<string, MonthlyReport[]> = {
+  "2023": [
+    { month: "January", income: 11200, expense: 6400 },
+    { month: "February", income: 10800, expense: 5900 },
+    { month: "March", income: 15500, expense: 7200 },
+    { month: "April", income: 12100, expense: 6100 },
+    { month: "May", income: 14300, expense: 8500 },
+    { month: "June", income: 13400, expense: 7200 },
+    { month: "July", income: 15200, expense: 6800 },
+    { month: "August", income: 12800, expense: 7400 },
+    { month: "September", income: 14100, expense: 6300 },
+    { month: "October", income: 14900, expense: 7900 },
+    { month: "November", income: 13300, expense: 6500 },
+    { month: "December", income: 16700, expense: 8800 },
+  ],
+  "2022": [
+    { month: "January", income: 9800, expense: 6100 },
+    { month: "February", income: 10100, expense: 5700 },
+    { month: "March", income: 12400, expense: 6900 },
+    { month: "April", income: 10900, expense: 5800 },
+    { month: "May", income: 11800, expense: 7200 },
+    { month: "June", income: 13100, expense: 6900 },
+    { month: "July", income: 12200, expense: 6500 },
+    { month: "August", income: 11500, expense: 7000 },
+    { month: "September", income: 12900, expense: 6000 },
+    { month: "October", income: 13600, expense: 7400 },
+    { month: "November", income: 12400, expense: 6200 },
+    { month: "December", income: 14900, expense: 8100 },
+  ],
+  "2021": [
+    { month: "January", income: 8800, expense: 5600 },
+    { month: "February", income: 9200, expense: 5300 },
+    { month: "March", income: 11300, expense: 6600 },
+    { month: "April", income: 9800, expense: 5500 },
+    { month: "May", income: 10400, expense: 6800 },
+    { month: "June", income: 11900, expense: 6400 },
+    { month: "July", income: 11200, expense: 6100 },
+    { month: "August", income: 10100, expense: 6600 },
+    { month: "September", income: 11700, expense: 5800 },
+    { month: "October", income: 12400, expense: 7100 },
+    { month: "November", income: 11800, expense: 6000 },
+    { month: "December", income: 13600, expense: 7700 },
+  ],
+};
 
 export const CHART_MONTHS = ["May", "Jun", "Jul", "Aug", "Sep", "Oct"];
 export const CHART_INCOME = [60, 65, 70, 55, 80, 85];
