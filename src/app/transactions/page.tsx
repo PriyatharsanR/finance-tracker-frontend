@@ -1,21 +1,87 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import TransactionModal from "@/components/TransactionModal";
-import { MOCK_TRANSACTIONS, formatCurrency } from "@/utils/constants";
+import Dropdown, { type DropdownOption } from "@/components/Dropdown";
+import {
+  MOCK_TRANSACTIONS,
+  CURRENT_YEAR_TRANSACTIONS,
+  formatCurrency,
+  getMonthKey,
+} from "@/utils/constants";
 import type { Transaction } from "@/types";
 
 type FilterType = "all" | "income" | "expense";
 
 export default function TransactionsPage() {
-  const [transactions, setTransactions] =
-    useState<Transaction[]>(MOCK_TRANSACTIONS);
+  const [transactions, setTransactions] = useState<Transaction[]>([
+    ...CURRENT_YEAR_TRANSACTIONS,
+    ...MOCK_TRANSACTIONS,
+  ]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [filter, setFilter] = useState<FilterType>("all");
+  const [selectedYear, setSelectedYear] = useState<string>(
+    String(new Date().getFullYear())
+  );
+  const [selectedMonth, setSelectedMonth] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
+  const yearOptions: DropdownOption[] = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    return Array.from({ length: 5 }, (_, i) => currentYear - i).map((y) => ({
+      key: String(y),
+      label: String(y),
+      selected: selectedYear === String(y),
+    }));
+  }, [selectedYear]);
+
+  const monthOptions: DropdownOption[] = useMemo(() => {
+    const activeYear = selectedYear || String(new Date().getFullYear());
+    const counts = new Map<string, number>();
+    for (const tx of transactions) {
+      if (new Date(tx.date).getFullYear() !== Number(activeYear)) continue;
+      const key = getMonthKey(tx.date);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const months = [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ];
+    return [
+      { key: "", label: "All months", selected: !selectedMonth },
+      ...months.map((name, i) => {
+        const key = `${activeYear}-${String(i + 1).padStart(2, "0")}`;
+        const count = counts.get(key) ?? 0;
+        return {
+          key,
+          label: name,
+          ...(count > 0 ? { count } : {}),
+          selected: key === selectedMonth,
+        };
+      }),
+    ];
+  }, [transactions, selectedYear, selectedMonth]);
+
+  const selectedYearLabel =
+    yearOptions.find((o) => o.key === selectedYear)?.label ?? selectedYear;
+  const selectedMonthLabel =
+    monthOptions.find((o) => o.key === selectedMonth)?.label ?? selectedMonth;
+
   const filtered = transactions.filter((tx) => {
+    if (selectedYear && new Date(tx.date).getFullYear() !== Number(selectedYear))
+      return false;
+    if (selectedMonth && getMonthKey(tx.date) !== selectedMonth) return false;
     if (filter === "all") return true;
     return tx.type === filter;
   });
@@ -29,6 +95,17 @@ export default function TransactionsPage() {
 
   function handleAddTransaction(tx: Transaction) {
     setTransactions((prev) => [tx, ...prev]);
+    setCurrentPage(1);
+  }
+
+  function selectYear(key: string) {
+    setSelectedYear(key);
+    setSelectedMonth("");
+    setCurrentPage(1);
+  }
+
+  function selectMonth(key: string) {
+    setSelectedMonth(key);
     setCurrentPage(1);
   }
 
@@ -56,16 +133,19 @@ export default function TransactionsPage() {
 
         {/* Filters Bar */}
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex flex-col md:flex-row gap-md items-center justify-between shadow-sm">
-          <div className="flex items-center gap-sm w-full md:w-auto">
-            <button className="flex items-center gap-sm px-3 py-1.5 border border-outline-variant rounded-lg text-label-md font-label-md hover:bg-surface-container-low transition-colors">
-              <span className="material-symbols-outlined text-[18px]">
-                calendar_month
-              </span>
-              October 2023
-              <span className="material-symbols-outlined text-[18px]">
-                arrow_drop_down
-              </span>
-            </button>
+          <div className="flex flex-col sm:flex-row gap-sm w-full md:w-auto">
+            <Dropdown
+              icon="calendar_month"
+              selectedLabel={selectedMonthLabel}
+              options={monthOptions}
+              onSelect={selectMonth}
+            />
+            <Dropdown
+              icon="calendar_view_month"
+              selectedLabel={selectedYearLabel}
+              options={yearOptions}
+              onSelect={selectYear}
+            />
           </div>
 
           <div className="flex bg-surface-container-low p-1 rounded-lg w-full md:w-auto">
@@ -190,6 +270,16 @@ export default function TransactionsPage() {
                     </tr>
                   );
                 })}
+                {paginated.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="py-12 text-center text-on-surface-variant text-body-md font-body-md"
+                    >
+                      No transactions found for this period.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -197,9 +287,12 @@ export default function TransactionsPage() {
           {/* Pagination */}
           <div className="border-t border-outline-variant p-4 flex items-center justify-between bg-surface-container-lowest">
             <span className="text-label-sm font-label-sm text-on-surface-variant">
-              Showing {(currentPage - 1) * perPage + 1} to{" "}
-              {Math.min(currentPage * perPage, filtered.length)} of{" "}
-              {filtered.length} entries
+              {filtered.length === 0
+                ? "No entries"
+                : `Showing ${(currentPage - 1) * perPage + 1} to ${Math.min(
+                    currentPage * perPage,
+                    filtered.length
+                  )} of ${filtered.length} entries`}
             </span>
             <div className="flex items-center gap-xs">
               <button
