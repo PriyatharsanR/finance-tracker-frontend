@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import Link from "next/link";
 
 const PAGE_TITLES: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -38,13 +39,17 @@ export default function TopNav() {
         <button className="p-2 rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors">
           <span className="material-symbols-outlined">notifications</span>
         </button>
-        <div className="w-8 h-8 rounded-full overflow-hidden border border-outline-variant">
+        <Link
+          href="/profile"
+          className="w-8 h-8 rounded-full overflow-hidden border border-outline-variant block"
+          aria-label="Go to profile"
+        >
           <div className="w-full h-full bg-secondary-container flex items-center justify-center">
             <span className="material-symbols-outlined text-on-secondary-container text-sm">
               person
             </span>
           </div>
-        </div>
+        </Link>
       </div>
     </header>
   );
