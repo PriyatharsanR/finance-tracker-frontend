@@ -24,33 +24,32 @@ export default function TransactionsPage() {
   const [selectedMonth, setSelectedMonth] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
-  useEffect(() => {
-    const fetchTransactions = async () => {
-      try {
-        const res = await transactionService.getAllTransactions();
-        if (res.data) {
-          const mapped: Transaction[] = res.data.map((t) => {
-            const d = new Date(t.transactionDate);
-            return {
-              id: t.id.toString(),
-              date: isNaN(d.getTime()) ? t.transactionDate : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-              category: t.categoryName || "Category",
-              categoryIcon: "receipt_long",
-              note: t.note || "Transaction",
-              type: t.type === "INCOME" ? "income" : "expense",
-              amount: t.type === "EXPENSE" ? -t.amount : t.amount,
-              status: "completed",
-            };
-          });
-          mapped.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          setTransactions(mapped);
-        }
-      } catch (err) {
-        console.error("Failed to load transactions", err);
-      } finally {
-        setLoading(false);
+  function fetchTransactions() {
+    setLoading(true);
+    transactionService.getAllTransactions().then(res => {
+      if (res.data) {
+        setTransactions(res.data.map(t => {
+          const d = new Date(t.transactionDate);
+          return {
+            id: t.id.toString(),
+            date: isNaN(d.getTime()) ? t.transactionDate : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+            category: t.categoryName || "Category",
+            categoryIcon: "receipt_long",
+            note: t.note || "Transaction",
+            type: (t.type === "INCOME" ? "income" : "expense") as "income" | "expense",
+            amount: t.type === "EXPENSE" ? -t.amount : t.amount,
+            status: "completed" as const,
+          };
+        }).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
       }
-    };
+    }).catch(err => {
+      console.error("Failed to load transactions", err);
+    }).finally(() => {
+      setLoading(false);
+    });
+  }
+
+  useEffect(() => {
     fetchTransactions();
   }, []);
 
@@ -120,9 +119,10 @@ export default function TransactionsPage() {
     currentPage * perPage
   );
 
-  function handleAddTransaction(tx: Transaction) {
-    setTransactions((prev) => [tx, ...prev].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+  function handleAddTransaction(tx: any) {
+    fetchTransactions();
     setCurrentPage(1);
+    setShowAddModal(false);
   }
 
   function selectYear(key: string) {

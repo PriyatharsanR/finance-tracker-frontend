@@ -5,19 +5,7 @@ import { createPortal } from "react-dom";
 import AppShell from "@/components/AppShell";
 import { CATEGORY_ICONS } from "@/utils/constants";
 import type { Category } from "@/types";
-
-const INITIAL_CATEGORIES: Category[] = [
-  { id: "1", name: "Housing", icon: "home", type: "expense", status: "active" },
-  { id: "2", name: "Food & Dining", icon: "restaurant", type: "expense", status: "active" },
-  { id: "3", name: "Salary", icon: "payments", type: "income", status: "active" },
-  { id: "4", name: "Transport", icon: "directions_car", type: "expense", status: "active" },
-  { id: "5", name: "Utilities", icon: "bolt", type: "expense", status: "active" },
-  { id: "6", name: "Freelance", icon: "work", type: "income", status: "active" },
-  { id: "7", name: "Subscriptions", icon: "subscriptions", type: "expense", status: "active" },
-  { id: "8", name: "Healthcare", icon: "medical_services", type: "expense", status: "active" },
-  { id: "9", name: "Education", icon: "school", type: "expense", status: "active" },
-  { id: "10", name: "Old Subscriptions", icon: "subscriptions", type: "expense", status: "inactive" },
-];
+import { categoryService, type CategoryResponse } from "@/services/categoryService";
 
 type ModalMode = "add" | "edit" | null;
 
@@ -78,8 +66,26 @@ function Modal({
 }
 
 export default function CategoriesPage() {
-  const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [filterText, setFilterText] = useState("");
+  
+  function fetchCategories() {
+    categoryService.getAllCategories().then(res => {
+      if (res.data) {
+        setCategories(res.data.map(c => ({
+          id: c.id.toString(),
+          name: c.name,
+          icon: "loyalty",
+          type: c.type === "INCOME" ? "income" : "expense",
+          status: c.active ? "active" : "inactive"
+        })));
+      }
+    });
+  }
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
   const [typeFilter, setTypeFilter] = useState<"all" | "income" | "expense">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [modalMode, setModalMode] = useState<ModalMode>(null);
@@ -130,43 +136,40 @@ export default function CategoriesPage() {
     setSelectedIcon("bolt");
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!categoryName.trim()) return;
 
-    if (modalMode === "add") {
-      const newCat: Category = {
-        id: Date.now().toString(),
-        name: categoryName.trim(),
-        icon: selectedIcon,
-        type: catType,
-        status: "active",
-      };
-      setCategories((prev) => [...prev, newCat]);
-    } else if (modalMode === "edit" && editingId) {
-      setCategories((prev) =>
-        prev.map((c) =>
-          c.id === editingId
-            ? { ...c, name: categoryName.trim(), icon: selectedIcon, type: catType }
-            : c
-        )
-      );
+    try {
+      if (modalMode === "add") {
+        await categoryService.createCategory({
+          name: categoryName.trim(),
+          type: catType === "income" ? "INCOME" : "EXPENSE"
+        });
+      } else if (modalMode === "edit" && editingId) {
+        await categoryService.updateCategory(Number(editingId), {
+          name: categoryName.trim(),
+          type: catType === "income" ? "INCOME" : "EXPENSE"
+        });
+      }
+      fetchCategories();
+      closeModal();
+    } catch (err) {
+      console.error(err);
     }
-    closeModal();
   }
 
-  function handleDelete(id: string) {
-    setCategories((prev) => prev.filter((c) => c.id !== id));
-    setShowDeleteConfirm(null);
+  async function handleDelete(id: string) {
+    try {
+      await categoryService.deleteCategory(Number(id));
+      fetchCategories();
+      setShowDeleteConfirm(null);
+    } catch (err) {
+      console.error(err);
+    }
   }
 
-  function toggleStatus(id: string) {
-    setCategories((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? { ...c, status: c.status === "active" ? "inactive" : "active" }
-          : c
-      )
-    );
+  async function toggleStatus(id: string) {
+    console.warn("Toggle disabled: Backend does not natively expose toggle endpoint");
   }
 
   return (

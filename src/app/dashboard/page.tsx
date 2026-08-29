@@ -1,30 +1,30 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
 import TransactionModal from "@/components/TransactionModal";
-import {
-  EXPENSE_CATEGORIES,
-  CHART_MONTHS,
-  CHART_INCOME,
-  CHART_EXPENSE,
-  formatCurrency,
-} from "@/utils/constants";
-import type { Transaction } from "@/types";
+import { formatCurrency } from "@/utils/constants";
+import { dashboardService, type DashboardResponse } from "@/services/dashboardService";
 import { transactionService } from "@/services/transactionService";
+import type { Transaction } from "@/types";
 
 export default function DashboardPage() {
+  const [summary, setSummary] = useState<DashboardResponse | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchTransactions = async () => {
+    const fetchData = async () => {
       try {
-        const res = await transactionService.getAllTransactions();
-        if (res.data) {
-          const mapped: Transaction[] = res.data.map((t) => {
+        const [dashRes, transRes] = await Promise.all([
+          dashboardService.getSummary(),
+          transactionService.getAllTransactions()
+        ]);
+        setSummary(dashRes);
+        if (transRes.data) {
+          const mapped: Transaction[] = transRes.data.map((t) => {
             const d = new Date(t.transactionDate);
             return {
               id: t.id.toString(),
@@ -32,28 +32,94 @@ export default function DashboardPage() {
               category: t.categoryName || "Category",
               categoryIcon: "receipt_long", // Fallback
               note: t.note || "Transaction",
-              type: t.type === "INCOME" ? "income" : "expense",
+              type: (t.type === "INCOME" ? "income" : "expense") as "income" | "expense",
               amount: t.type === "EXPENSE" ? -t.amount : t.amount,
-              status: "completed",
+              status: "completed" as const,
             };
           });
           mapped.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
           setTransactions(mapped);
         }
       } catch (err) {
-        console.error("Failed to load transactions", err);
+        console.error("Failed to load dashboard data", err);
       } finally {
         setLoading(false);
       }
     };
-    fetchTransactions();
+    fetchData();
   }, []);
 
   const topTransactions = transactions.slice(0, 5);
 
   function handleAddTransaction(tx: Transaction) {
-    setTransactions((prev) => [tx, ...prev].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    dashboardService.getSummary().then(setSummary);
+    transactionService.getAllTransactions().then(res => {
+      if (res.data) {
+        setTransactions(res.data.map((t) => {
+          const d = new Date(t.transactionDate);
+          return {
+            id: t.id.toString(),
+            date: isNaN(d.getTime()) ? t.transactionDate : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+            category: t.categoryName || "Category",
+            categoryIcon: "receipt_long",
+            note: t.note || "Transaction",
+            type: (t.type === "INCOME" ? "income" : "expense") as "income" | "expense",
+            amount: t.type === "EXPENSE" ? -t.amount : t.amount,
+            status: "completed" as const,
+          }
+        }).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      }
+    });
   }
+
+  const { CHART_MONTHS, CHART_INCOME, CHART_EXPENSE } = useMemo(() => {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const incomeObj = new Array(12).fill(0);
+    const expenseObj = new Array(12).fill(0);
+    
+    transactions.forEach(tx => {
+      const date = new Date(tx.date);
+      if (!isNaN(date.getTime())) {
+        const mId = date.getMonth();
+        if (tx.type === "income") {
+          incomeObj[mId] += tx.amount;
+        } else {
+          expenseObj[mId] += Math.abs(tx.amount);
+        }
+      }
+    });
+
+    const maxVal = Math.max(...incomeObj, ...expenseObj, 1);
+    return {
+      CHART_MONTHS: months,
+      CHART_INCOME: incomeObj.map(v => Math.round((v / maxVal) * 100)),
+      CHART_EXPENSE: expenseObj.map(v => Math.round((v / maxVal) * 100))
+    };
+  }, [transactions]);
+
+  const EXPENSE_CATEGORIES = useMemo(() => {
+    const expenseTx = transactions.filter(t => t.type === "expense");
+    const totalExp = expenseTx.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+    
+    const catMap: Record<string, number> = {};
+    expenseTx.forEach(t => {
+      catMap[t.category] = (catMap[t.category] || 0) + Math.abs(t.amount);
+    });
+
+    const colors = ["#2170e4", "#ffb786", "#dce2f3", "#c2c6d6", "#adc6ff"];
+    let colorIndex = 0;
+
+    return Object.entries(catMap).map(([name, amount]) => {
+      const c = colors[colorIndex % colors.length];
+      colorIndex++;
+      return {
+        name,
+        amount,
+        percent: totalExp > 0 ? Math.round((amount / totalExp) * 100) : 0,
+        color: c
+      }
+    }).sort((a,b) => b.percent - a.percent);
+  }, [transactions]);
 
   return (
     <AppShell>
@@ -95,7 +161,7 @@ export default function DashboardPage() {
               Current Balance
             </p>
             <h3 className="font-headline-lg text-headline-lg text-on-surface group-hover:text-primary transition-colors">
-              $12,450.00
+              {formatCurrency(summary?.currentBalance || 0)}
             </h3>
           </div>
 
@@ -109,14 +175,14 @@ export default function DashboardPage() {
                 <span className="material-symbols-outlined text-[14px]">
                   arrow_upward
                 </span>{" "}
-                12%
+                Current Year
               </span>
             </div>
             <p className="font-label-md text-label-md text-on-surface-variant mb-1">
               Total Income
             </p>
             <h3 className="font-headline-lg text-headline-lg text-on-surface">
-              +$4,200.00
+              {formatCurrency(summary?.totalIncome || 0)}
             </h3>
           </div>
 
@@ -130,14 +196,14 @@ export default function DashboardPage() {
                 <span className="material-symbols-outlined text-[14px]">
                   arrow_upward
                 </span>{" "}
-                4%
+                Current Year
               </span>
             </div>
             <p className="font-label-md text-label-md text-on-surface-variant mb-1">
               Total Expense
             </p>
             <h3 className="font-headline-lg text-headline-lg text-on-surface">
-              -$1,850.00
+              {formatCurrency(summary?.totalExpenses ? -summary.totalExpenses : 0)}
             </h3>
           </div>
 
@@ -150,19 +216,19 @@ export default function DashboardPage() {
                   <span className="material-symbols-outlined">savings</span>
                 </div>
                 <span className="font-label-sm text-label-sm text-on-surface-variant bg-surface-container-low px-2 py-1 rounded-md">
-                  Excellent
+                  Current Year
                 </span>
               </div>
               <p className="font-label-md text-label-md text-on-surface-variant mb-1">
                 Savings Rate
               </p>
               <h3 className="font-headline-lg text-headline-lg text-on-surface">
-                56%
+                {summary?.totalIncome && summary.totalIncome > 0 ? Math.round(((summary.totalIncome - summary.totalExpenses) / summary.totalIncome) * 100) : 0}%
               </h3>
               <div className="w-full bg-surface-container-high h-2 rounded-full mt-4 overflow-hidden">
                 <div
                   className="bg-primary h-full rounded-full"
-                  style={{ width: "56%" }}
+                  style={{ width: `${summary?.totalIncome && summary.totalIncome > 0 ? Math.round(((summary.totalIncome - summary.totalExpenses) / summary.totalIncome) * 100) : 0}%` }}
                 />
               </div>
             </div>
@@ -275,7 +341,7 @@ export default function DashboardPage() {
                   Total
                 </span>
                 <span className="font-headline-md text-headline-md text-on-surface">
-                  -$1.85k
+                  {formatCurrency(summary?.totalExpenses ? -summary.totalExpenses : 0)}
                 </span>
               </div>
             </div>
