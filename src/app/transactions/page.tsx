@@ -1,24 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import AppShell from "@/components/AppShell";
 import TransactionModal from "@/components/TransactionModal";
 import Dropdown, { type DropdownOption } from "@/components/Dropdown";
 import {
-  MOCK_TRANSACTIONS,
-  CURRENT_YEAR_TRANSACTIONS,
   formatCurrency,
   getMonthKey,
 } from "@/utils/constants";
 import type { Transaction } from "@/types";
+import { transactionService } from "@/services/transactionService";
 
 type FilterType = "all" | "income" | "expense";
 
 export default function TransactionsPage() {
-  const [transactions, setTransactions] = useState<Transaction[]>([
-    ...CURRENT_YEAR_TRANSACTIONS,
-    ...MOCK_TRANSACTIONS,
-  ]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [filter, setFilter] = useState<FilterType>("all");
   const [selectedYear, setSelectedYear] = useState<string>(
@@ -26,6 +23,36 @@ export default function TransactionsPage() {
   );
   const [selectedMonth, setSelectedMonth] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      try {
+        const res = await transactionService.getAllTransactions();
+        if (res.data) {
+          const mapped: Transaction[] = res.data.map((t) => {
+            const d = new Date(t.transactionDate);
+            return {
+              id: t.id.toString(),
+              date: isNaN(d.getTime()) ? t.transactionDate : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+              category: t.categoryName || "Category",
+              categoryIcon: "receipt_long",
+              note: t.note || "Transaction",
+              type: t.type === "INCOME" ? "income" : "expense",
+              amount: t.type === "EXPENSE" ? -t.amount : t.amount,
+              status: "completed",
+            };
+          });
+          mapped.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          setTransactions(mapped);
+        }
+      } catch (err) {
+        console.error("Failed to load transactions", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTransactions();
+  }, []);
 
   const yearOptions: DropdownOption[] = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -94,7 +121,7 @@ export default function TransactionsPage() {
   );
 
   function handleAddTransaction(tx: Transaction) {
-    setTransactions((prev) => [tx, ...prev]);
+    setTransactions((prev) => [tx, ...prev].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     setCurrentPage(1);
   }
 

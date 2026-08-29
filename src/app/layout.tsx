@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Inter } from "next/font/google";
 import "./globals.css";
+import { AuthProvider } from "@/context/AuthContext";
 
 const geist = Geist({
   variable: "--font-geist",
@@ -30,7 +31,11 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="font-body-lg antialiased">{children}</body>
+      <body className="font-body-lg antialiased">
+        <AuthProvider>
+          {children}
+        </AuthProvider>
+      </body>
     </html>
   );
 }

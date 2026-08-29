@@ -4,7 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { authService } from "@/services/authService";
+import { useAuth } from "@/context/AuthContext";
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address."),
@@ -16,29 +19,28 @@ type LoginFormData = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const { login } = useAuth();
 
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm<LoginFormData>({
-    resolver: async (data) => {
-      try {
-        loginSchema.parse(data);
-        return { values: data, errors: {} };
-      } catch (e) {
-        const zodError = e as z.ZodError;
-        return {
-          values: {},
-          errors: zodError.flatten().fieldErrors,
-        };
-      }
-    },
+    resolver: zodResolver(loginSchema),
   });
 
-  const onSubmit = (data: LoginFormData) => {
-    console.log("Login:", data);
-    router.push("/dashboard");
+  const onSubmit = async (data: LoginFormData) => {
+    try {
+      setErrorMsg("");
+      const response = await authService.login({ email: data.email, password: data.password });
+      if (response.data?.token) {
+        login(response.data);
+        router.push("/dashboard");
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || err.response?.data?.message || "Login failed. Please check your credentials.");
+    }
   };
 
   return (
@@ -59,6 +61,12 @@ export default function LoginPage() {
           <h2 className="font-headline-md text-headline-md mb-lg">
             Welcome back
           </h2>
+          {errorMsg && (
+            <div className="mb-md p-3 bg-error-container text-error rounded-md font-label-sm text-label-sm flex items-center gap-2">
+              <span className="material-symbols-outlined text-sm">error</span>
+              {errorMsg}
+            </div>
+          )}
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-md">
             {/* Email Field */}
             <div>
