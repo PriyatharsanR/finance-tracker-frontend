@@ -10,7 +10,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // For now, allow all routes (auth token check can be added later)
+  // Check for auth token in cookies
+  const token = request.cookies.get("token")?.value;
+  if (!token) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
   return NextResponse.next();
 }
 

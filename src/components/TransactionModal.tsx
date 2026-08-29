@@ -2,8 +2,9 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Modal from "./Modal";
-import { MOCK_CATEGORIES } from "@/utils/constants";
-import type { Category, Transaction } from "@/types";
+import type { Transaction } from "@/types";
+import { transactionService } from "@/services/transactionService";
+import { categoryService, CategoryResponse } from "@/services/categoryService";
 
 function formatDateForDisplay(dateStr: string): string {
   if (!dateStr) return "";
@@ -29,25 +30,39 @@ export default function TransactionModal({
   const [note, setNote] = useState("");
   const [amount, setAmount] = useState("");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [allCategories, setAllCategories] = useState<CategoryResponse[]>([]);
 
-  const categories = useMemo(
-    () => MOCK_CATEGORIES.filter((c) => c.status === "active" && c.type === type),
-    [type]
+  useEffect(() => {
+    const fetchCats = async () => {
+      try {
+        const res = await categoryService.getAllCategories();
+        if (res.data) setAllCategories(res.data);
+      } catch (err) {
+        console.error("Failed to load categories", err);
+      }
+    };
+    fetchCats();
+  }, []);
+
+  const currentCategories = useMemo(
+    () => allCategories.filter((c) => c.type.toLowerCase() === type),
+    [allCategories, type]
   );
 
   useEffect(() => {
-    if (categories.length > 0) {
+    if (currentCategories.length > 0) {
       setCategoryId((prev) =>
-        categories.some((c) => c.id === prev) ? prev : categories[0].id
+        currentCategories.some((c) => c.id.toString() === prev) ? prev : currentCategories[0].id.toString()
       );
     }
-  }, [categories]);
+  }, [currentCategories]);
 
-  const selectedCategory: Category | undefined = categories.find(
-    (c) => c.id === categoryId
+  const selectedCategory = currentCategories.find(
+    (c) => c.id.toString() === categoryId
   );
 
-  function handleSave() {
+  async function handleSave() {
     const amountNum = parseFloat(amount);
     if (!date) {
       setError("Please select a date.");
@@ -62,19 +77,37 @@ export default function TransactionModal({
       return;
     }
 
-    const signedAmount = type === "expense" ? -amountNum : amountNum;
+    setIsSubmitting(true);
+    setError("");
 
-    onAdd({
-      id: Date.now().toString(),
-      date: formatDateForDisplay(date),
-      category: selectedCategory?.name || "",
-      categoryIcon: selectedCategory?.icon || "receipt_long",
-      note: note.trim() || selectedCategory?.name || "Transaction",
-      type,
-      amount: signedAmount,
-      status: "completed",
-    });
-    onClose();
+    try {
+      const isIncome = type === "income";
+      const req = {
+        transactionDate: date,
+        categoryId: parseInt(categoryId),
+        type: (isIncome ? "INCOME" : "EXPENSE") as "INCOME" | "EXPENSE",
+        amount: amountNum,
+        note: note.trim()
+      };
+      const res = await transactionService.createTransaction(req);
+      if (res.data) {
+        const data = res.data;
+        onAdd({
+          id: data.id.toString(),
+          date: formatDateForDisplay(data.transactionDate),
+          category: data.categoryName || selectedCategory?.name || "",
+          categoryIcon: selectedCategory?.icon || "receipt_long",
+          note: data.note || selectedCategory?.name || "Transaction",
+          type,
+          amount: isIncome ? amountNum : -amountNum,
+          status: "completed",
+        });
+        onClose();
+      }
+    } catch (err: any) {
+      setError(err.message || err.response?.data?.message || "Failed to save transaction.");
+      setIsSubmitting(false);
+    }
   }
 
   const inputClass =
@@ -320,8 +353,8 @@ export default function TransactionModal({
                 onChange={(e) => setCategoryId(e.target.value)}
                 className="w-full pl-10 pr-8 py-2.5 rounded-xl border border-outline-variant bg-surface-bright focus:ring-2 focus:ring-primary focus:border-primary text-body-md font-body-md text-on-surface transition-colors outline-none appearance-none"
               >
-                {categories.length === 0 && <option value="">No categories</option>}
-                {categories.map((cat) => (
+                {currentCategories.length === 0 && <option value="">No categories</option>}
+                {currentCategories.map((cat) => (
                   <option key={cat.id} value={cat.id}>
                     {cat.name}
                   </option>
@@ -334,9 +367,9 @@ export default function TransactionModal({
                 arrow_drop_down
               </span>
             </div>
-            {categories.length === 0 && (
+            {currentCategories.length === 0 && (
               <p className="text-label-sm font-label-sm text-on-surface-variant mt-xs">
-                No {type} categories exist. Add one in Categories first.
+                No {type} categories configured in the backend.
               </p>
             )}
           </div>
@@ -395,16 +428,18 @@ export default function TransactionModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-md py-2.5 rounded-xl border border-outline-variant text-on-surface font-label-md text-label-md hover:bg-surface-container-low transition-colors"
+            disabled={isSubmitting}
+            className="px-md py-2.5 rounded-xl border border-outline-variant text-on-surface font-label-md text-label-md hover:bg-surface-container-low transition-colors disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={handleSave}
-            className="px-md py-2.5 rounded-xl bg-primary text-on-primary font-label-md text-label-md hover:bg-primary-container transition-colors shadow-sm active:scale-95"
+            disabled={isSubmitting}
+            className="px-md py-2.5 rounded-xl bg-primary text-on-primary font-label-md text-label-md hover:bg-primary-container transition-colors shadow-sm active:scale-95 disabled:opacity-50"
           >
-            Save Transaction
+            {isSubmitting ? "Saving..." : "Save Transaction"}
           </button>
         </div>
       </div>

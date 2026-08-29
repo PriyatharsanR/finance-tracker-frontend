@@ -4,7 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { authService } from "@/services/authService";
 
 const registerSchema = z
   .object({
@@ -24,29 +26,29 @@ type RegisterFormData = z.infer<typeof registerSchema>;
 export default function RegisterPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm<RegisterFormData>({
-    resolver: async (data) => {
-      try {
-        registerSchema.parse(data);
-        return { values: data, errors: {} };
-      } catch (e) {
-        const zodError = e as z.ZodError;
-        return {
-          values: {},
-          errors: zodError.flatten().fieldErrors,
-        };
-      }
-    },
+    resolver: zodResolver(registerSchema),
   });
 
-  const onSubmit = (data: RegisterFormData) => {
-    console.log("Register:", data);
-    router.push("/login");
+  const onSubmit = async (data: RegisterFormData) => {
+    try {
+      setErrorMsg("");
+      setSuccessMsg("");
+      const response = await authService.register({ name: data.fullName, email: data.email, password: data.password });
+      setSuccessMsg(response.message || "Account created successfully! Redirecting...");
+      setTimeout(() => {
+        router.push("/login");
+      }, 2500);
+    } catch (err: any) {
+      setErrorMsg(err.message || err.response?.data?.message || "Registration failed. Please try again.");
+    }
   };
 
   return (
@@ -77,6 +79,18 @@ export default function RegisterPage() {
               Join FinTrack to manage your premium finance.
             </p>
           </div>
+
+          {errorMsg && (
+            <div className="mb-md p-3 bg-error-container text-error rounded-md font-label-sm text-label-sm">
+              {errorMsg}
+            </div>
+          )}
+          {successMsg && (
+            <div className="mb-md p-3 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md font-label-sm text-label-sm flex items-center gap-2">
+              <span className="material-symbols-outlined text-sm">check_circle</span>
+              {successMsg}
+            </div>
+          )}
 
           {/* Registration Form */}
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-md">
