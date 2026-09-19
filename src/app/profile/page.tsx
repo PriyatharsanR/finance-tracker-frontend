@@ -1,437 +1,318 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useEffect } from "react";
 import AppShell from "@/components/AppShell";
+import { userService, UserProfile } from "@/services/userService";
+import { useAuth } from "@/context/AuthContext";
+import { useRouter } from "next/navigation";
 import Modal from "@/components/Modal";
 
 export default function ProfilePage() {
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Edit State
   const [isEditing, setIsEditing] = useState(false);
-  const [isChangingPassword, setIsChangingPassword] = useState(false);
-  const [avatar, setAvatar] = useState<string | null>(null);
-  const [profile, setProfile] = useState({
-    fullName: "Alex Carter",
-    email: "alex.carter@example.com",
-    phone: "+1 (555) 123-4567",
-    location: "San Francisco, CA",
-  });
-  const [draft, setDraft] = useState({ ...profile });
-  const [passwords, setPasswords] = useState({
-    current: "",
-    new: "",
-    confirm: "",
-  });
-  const [passwordError, setPasswordError] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [editForm, setEditForm] = useState({ name: "", email: "" });
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  const { logout, login, user } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const fetchProfile = async () => {
+    try {
+      const response = await userService.getCurrentUserProfile();
+      setProfile(response.data);
+    } catch (err: any) {
+      setError(err.message || "Failed to load profile");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    router.push("/login");
+  };
 
   const openEditor = () => {
-    setDraft({ ...profile });
-    setIsEditing(true);
+    if (profile) {
+      setEditForm({ name: profile.name, email: profile.email });
+      setSaveError("");
+      setIsEditing(true);
+    }
   };
 
-  const saveProfile = () => {
-    setProfile({ ...draft });
-    setIsEditing(false);
-  };
-
-  const openPasswordModal = () => {
-    setPasswords({ current: "", new: "", confirm: "" });
-    setPasswordError("");
-    setIsChangingPassword(true);
-  };
-
-  const changePassword = () => {
-    if (!passwords.current) {
-      setPasswordError("Please enter your current password.");
+  const saveProfile = async () => {
+    if (!editForm.name.trim() || !editForm.email.trim()) {
+      setSaveError("Name and Email cannot be empty.");
       return;
     }
-    if (passwords.new.length < 8) {
-      setPasswordError("New password must be at least 8 characters.");
-      return;
+    
+    setIsSaving(true);
+    setSaveError("");
+    try {
+      const response = await userService.updateUserProfile(editForm);
+      setProfile(response.data);
+      if (user) {
+         login({ ...user, name: response.data.name, email: response.data.email });
+      }
+      setIsEditing(false);
+    } catch (err: any) {
+      setSaveError(err.message || "Unable to save profile changes.");
+    } finally {
+      setIsSaving(false);
     }
-    if (passwords.new !== passwords.confirm) {
-      setPasswordError("New passwords do not match.");
-      return;
-    }
-    setPasswordError("");
-    setIsChangingPassword(false);
   };
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) return;
-    setAvatar(URL.createObjectURL(file));
-    e.target.value = "";
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return "";
+    return new Date(dateStr).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
   };
 
-  const inputClass =
-    "w-full px-sm py-2 bg-surface-bright border border-outline-variant rounded-lg text-body-md font-body-md text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
+  if (loading) {
+    return (
+      <AppShell>
+        <div className="flex justify-center items-center h-[60vh]">
+          <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (error || !profile) {
+    return (
+      <AppShell>
+        <div className="flex justify-center items-center h-[60vh]">
+          <p className="text-error font-medium text-lg">{error || "Profile not found."}</p>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
-      <div className="max-w-container-max mx-auto w-full p-md md:p-lg xl:p-2xl gap-lg flex flex-col">
-        {/* Header */}
-        <div className="flex justify-between items-end mb-sm">
+      <div className="max-w-5xl mx-auto w-full p-4 md:p-8 space-y-6">
+        
+        {/* Page Header */}
+        <div className="flex flex-col md:flex-row md:justify-between md:items-end mb-6">
           <div>
-            <h1 className="text-headline-lg font-headline-lg text-on-surface">
-              Profile Settings
-            </h1>
-            <p className="text-body-md font-body-md text-on-surface-variant mt-xs">
-              Manage your personal information and security preferences.
+            <h1 className="text-3xl font-semibold text-on-surface tracking-tight">Account Settings</h1>
+            <p className="text-on-surface-variant mt-1 text-sm">
+              Manage your personal information and preferences.
             </p>
           </div>
         </div>
 
-        {/* Profile Overview Card */}
-        <div className="bg-surface border border-outline-variant rounded-xl p-lg md:p-2xl shadow-[0_4px_12px_rgba(0,0,0,0.03)] flex flex-col md:flex-row items-center gap-lg">
-          <div className="relative">
-            <div className="w-32 h-32 rounded-full bg-secondary-container flex items-center justify-center border-4 border-surface shadow-sm overflow-hidden">
-              {avatar ? (
-                <img
-                  src={avatar}
-                  alt="Profile"
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <span className="material-symbols-outlined text-on-secondary-container text-5xl">
-                  person
-                </span>
-              )}
-            </div>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="absolute bottom-0 right-0 p-2 bg-primary text-on-primary rounded-full shadow-md hover:bg-on-primary-fixed transition-colors duration-150"
-              aria-label="Change profile picture"
-            >
-              <span
-                className="material-symbols-outlined"
-                style={{
-                  fontVariationSettings: "'FILL' 1",
-                  fontSize: "16px",
-                }}
-              >
-                edit
-              </span>
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleAvatarChange}
-              className="hidden"
-            />
+        {/* Top Profile Card */}
+        <div className="bg-surface border border-outline-variant rounded-2xl shadow-sm overflow-hidden">
+          <div className="h-32 bg-primary/10 w-full relative">
+             <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-primary/5 to-transparent"></div>
           </div>
-
-          <div className="text-center md:text-left flex-1">
-            <h2 className="text-headline-lg font-headline-lg text-on-surface">
-              {profile.fullName}
-            </h2>
-            <p className="text-body-lg font-body-lg text-on-surface-variant mb-md">
-              {profile.email}
-            </p>
-            <div className="flex items-center justify-center md:justify-start gap-sm">
-              <span className="px-sm py-1 bg-secondary-container text-on-secondary-container rounded-full text-label-sm font-label-sm">
-                Premium Member
-              </span>
-              <span className="px-sm py-1 bg-surface-container-high text-on-surface-variant rounded-full text-label-sm font-label-sm">
-                Joined 2023
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Two Column Settings */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-lg mt-md">
-          {/* Personal Information */}
-          <div className="bg-surface border border-outline-variant rounded-xl p-lg shadow-[0_4px_12px_rgba(0,0,0,0.03)] flex flex-col">
-            <div className="flex items-center gap-sm mb-lg">
-              <span className="material-symbols-outlined text-primary">
-                badge
-              </span>
-              <h3 className="text-headline-md font-headline-md text-on-surface">
-                Personal Information
-              </h3>
-            </div>
-            <div className="space-y-md flex-1">
-              <div>
-                <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">
-                  Full Name
-                </label>
-                <div className="text-body-md font-body-md text-on-surface">
-                  {profile.fullName}
-                </div>
-              </div>
-              <div>
-                <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">
-                  Phone Number
-                </label>
-                <div className="text-body-md font-body-md text-on-surface">
-                  {profile.phone}
-                </div>
-              </div>
-              <div>
-                <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">
-                  Location
-                </label>
-                <div className="text-body-md font-body-md text-on-surface">
-                  {profile.location}
-                </div>
-              </div>
-            </div>
-            <div className="mt-lg pt-md border-t border-outline-variant">
-              <button
-                onClick={openEditor}
-                className="w-full py-2 bg-surface text-on-surface border border-outline-variant rounded-lg hover:bg-surface-container-low transition-colors duration-150 text-label-md font-label-md flex justify-center items-center gap-sm"
-              >
-                <span
-                  className="material-symbols-outlined"
-                  style={{ fontSize: "20px" }}
-                >
-                  edit_note
-                </span>
-                Edit Profile
-              </button>
-            </div>
-          </div>
-
-          {/* Security */}
-          <div className="bg-surface border border-outline-variant rounded-xl p-lg shadow-[0_4px_12px_rgba(0,0,0,0.03)] flex flex-col">
-            <div className="flex items-center gap-sm mb-lg">
-              <span className="material-symbols-outlined text-primary">
-                lock
-              </span>
-              <h3 className="text-headline-md font-headline-md text-on-surface">
-                Security
-              </h3>
-            </div>
-            <div className="space-y-md flex-1">
-              <div>
-                <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">
-                  Password
-                </label>
-                <div className="text-body-md font-body-md text-on-surface">
-                  ••••••••••••
-                </div>
-              </div>
-              <div>
-                <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">
-                  Two-Factor Authentication
-                </label>
-                <div className="flex items-center gap-sm">
-                  <span className="w-2 h-2 rounded-full bg-primary" />
-                  <span className="text-body-md font-body-md text-on-surface">
-                    Enabled via SMS
+          <div className="px-6 md:px-10 pb-8 relative">
+            
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
+              <div className="flex flex-col md:flex-row items-center md:items-end gap-6 -mt-12 md:-mt-16">
+                <div className="w-28 h-28 md:w-32 md:h-32 rounded-full bg-surface-container border-4 border-surface shadow-md flex items-center justify-center relative">
+                  <span className="material-symbols-outlined text-5xl md:text-6xl text-primary opacity-80">
+                    person
                   </span>
                 </div>
-              </div>
-              <div>
-                <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">
-                  Active Sessions
-                </label>
-                <div className="text-body-md font-body-md text-on-surface">
-                  2 Devices
+                
+                <div className="text-center md:text-left mt-4 md:mt-0 pb-1">
+                  <h2 className="text-2xl font-bold text-on-surface">{profile.name}</h2>
+                  <p className="text-on-surface-variant">{profile.email}</p>
                 </div>
               </div>
-            </div>
-            <div className="mt-lg pt-md border-t border-outline-variant">
-              <button
-                onClick={openPasswordModal}
-                className="w-full py-2 bg-primary text-on-primary rounded-lg hover:bg-on-primary-fixed transition-colors duration-150 text-label-md font-label-md flex justify-center items-center gap-sm"
-              >
-                <span
-                  className="material-symbols-outlined"
-                  style={{ fontSize: "20px" }}
+              
+              <div className="mt-6 md:mt-0 w-full md:w-auto flex justify-center md:justify-end">
+                <button
+                  onClick={openEditor}
+                  className="w-full md:w-auto px-5 py-2.5 bg-surface border border-outline-variant text-on-surface rounded-xl hover:bg-surface-container-low transition-colors text-sm font-medium shadow-sm flex items-center justify-center gap-2"
                 >
-                  key
-                </span>
-                Change Password
-              </button>
+                  <span className="material-symbols-outlined text-[18px]">edit</span>
+                  Edit Profile
+                </button>
+              </div>
             </div>
+            
           </div>
         </div>
 
-        {/* Mobile Logout */}
-        <div className="md:hidden mt-lg flex justify-center">
-          <button className="w-full py-3 bg-error-container text-on-error-container rounded-lg hover:bg-error hover:text-on-error transition-colors duration-150 text-label-md font-label-md flex justify-center items-center gap-sm font-bold">
-            <span className="material-symbols-outlined">logout</span>
-            Logout
-          </button>
+        {/* Information Grids */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* Personal Information */}
+          <div className="lg:col-span-2 bg-surface border border-outline-variant rounded-2xl shadow-sm p-6 md:p-8">
+            <h3 className="text-lg font-semibold text-on-surface mb-6 flex items-center gap-2">
+               <span className="material-symbols-outlined text-primary">badge</span>
+               Personal Information
+            </h3>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-6 gap-x-8">
+              <div className="flex flex-col">
+                <span className="text-sm text-on-surface-variant font-medium mb-1">Full Name</span>
+                <span className="text-base text-on-surface">{profile.name}</span>
+              </div>
+              
+              <div className="flex flex-col">
+                <span className="text-sm text-on-surface-variant font-medium mb-1">Email Address</span>
+                <span className="text-base text-on-surface">{profile.email}</span>
+              </div>
+              
+              <div className="flex flex-col pt-4 border-t border-outline-variant/30">
+                <span className="text-sm text-on-surface-variant font-medium mb-1">Access Role</span>
+                <span className="inline-flex items-center gap-1.5 self-start px-2.5 py-1 rounded-md bg-primary-container text-on-primary-container text-xs font-semibold">
+                  <span className="material-symbols-outlined text-[14px]">shield</span>
+                  {profile.role}
+                </span>
+              </div>
+              
+              <div className="flex flex-col pt-4 border-t border-outline-variant/30">
+                <span className="text-sm text-on-surface-variant font-medium mb-1">Member Since</span>
+                <span className="text-base text-on-surface">{formatDate(profile.createdAt)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Actions / Side Panel */}
+          <div className="bg-surface border border-outline-variant rounded-2xl shadow-sm p-6 md:p-8 flex flex-col">
+            <h3 className="text-lg font-semibold text-on-surface mb-6 flex items-center gap-2">
+               <span className="material-symbols-outlined text-primary">security</span>
+               Security & Access
+            </h3>
+            
+            <div className="flex-1 space-y-4">
+               <div className="p-4 rounded-xl border border-outline-variant/50 bg-surface-container-lowest hover:bg-surface-container-low transition-colors cursor-pointer group">
+                  <div className="flex justify-between items-center">
+                     <div>
+                        <p className="font-medium text-sm text-on-surface">Password</p>
+                        <p className="text-xs text-on-surface-variant mt-0.5">Change your password</p>
+                     </div>
+                     <span className="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors">chevron_right</span>
+                  </div>
+               </div>
+               
+               <div className="p-4 rounded-xl border border-outline-variant/50 bg-surface-container-lowest hover:bg-surface-container-low transition-colors cursor-pointer group">
+                  <div className="flex justify-between items-center">
+                     <div>
+                        <p className="font-medium text-sm text-on-surface">Two-step Verification</p>
+                        <p className="text-xs text-on-surface-variant mt-0.5">Not enabled</p>
+                     </div>
+                     <span className="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors">chevron_right</span>
+                  </div>
+               </div>
+            </div>
+
+            <div className="mt-8 pt-6 border-t border-outline-variant">
+              <button 
+                onClick={handleLogout}
+                className="w-full py-2.5 bg-error-container/50 text-on-error-container rounded-xl hover:bg-error-container transition-colors text-sm font-medium flex justify-center items-center gap-2 group"
+              >
+                <span className="material-symbols-outlined text-[18px] group-hover:text-error">logout</span>
+                Sign Out
+              </button>
+            </div>
+          </div>
+
         </div>
       </div>
 
+      {/* Edit Profile Modal */}
       {isEditing && (
         <Modal onClose={() => setIsEditing(false)}>
           <div
-            className="bg-surface rounded-xl shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto"
-            style={{ maxWidth: 480 }}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: "480px",
+              maxHeight: "90vh",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+              borderRadius: "16px",
+              backgroundColor: "#ffffff",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
+            }}
           >
-            <div className="flex justify-between items-center p-lg border-b border-outline-variant">
-              <h3 className="text-headline-md font-headline-md text-on-surface">
-                Edit Profile
+            <div className="px-6 py-5 border-b border-outline-variant flex justify-between items-center bg-surface-container-lowest">
+              <h3 className="text-lg font-semibold text-on-surface flex items-center gap-2">
+                 <span className="material-symbols-outlined text-primary">edit_document</span>
+                 Update Personal Details
               </h3>
               <button
                 onClick={() => setIsEditing(false)}
-                className="p-1 rounded-full hover:bg-surface-container-low text-on-surface-variant transition-colors"
-                aria-label="Close"
+                className="p-1 rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors flex items-center justify-center p-1.5"
               >
-                <span className="material-symbols-outlined">close</span>
+                <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
-            <div className="p-lg space-y-md">
+            
+            <div className="p-6 space-y-5 flex-1 overflow-y-auto w-full">
               <div>
-                <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">
+                <label className="block text-sm font-medium text-on-surface mb-1.5">
                   Full Name
                 </label>
                 <input
                   type="text"
-                  value={draft.fullName}
-                  onChange={(e) =>
-                    setDraft({ ...draft, fullName: e.target.value })
-                  }
-                  className={inputClass}
-                  placeholder="Your full name"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-surface border border-outline-variant rounded-xl text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  placeholder="Enter your full name"
+                  disabled={isSaving}
                 />
               </div>
+              
               <div>
-                <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">
-                  Email
+                <label className="block text-sm font-medium text-on-surface mb-1.5">
+                  Email Address
                 </label>
                 <input
                   type="email"
-                  value={draft.email}
-                  onChange={(e) =>
-                    setDraft({ ...draft, email: e.target.value })
-                  }
-                  className={inputClass}
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-surface border border-outline-variant rounded-xl text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                   placeholder="you@example.com"
+                  disabled={isSaving}
                 />
               </div>
-              <div>
-                <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">
-                  Phone Number
-                </label>
-                <input
-                  type="tel"
-                  value={draft.phone}
-                  onChange={(e) =>
-                    setDraft({ ...draft, phone: e.target.value })
-                  }
-                  className={inputClass}
-                  placeholder="+1 (555) 000-0000"
-                />
-              </div>
-              <div>
-                <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">
-                  Location
-                </label>
-                <input
-                  type="text"
-                  value={draft.location}
-                  onChange={(e) =>
-                    setDraft({ ...draft, location: e.target.value })
-                  }
-                  className={inputClass}
-                  placeholder="City, State"
-                />
-              </div>
+
+              {saveError && (
+                <div className="p-3 bg-error-container border border-error/20 text-on-error-container rounded-lg text-sm flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px]">error</span>
+                  <p>{saveError}</p>
+                </div>
+              )}
             </div>
-            <div className="p-lg pt-0 flex gap-sm">
+            
+            <div className="px-6 py-4 bg-surface-container-lowest border-t border-outline-variant flex justify-end gap-3">
               <button
                 onClick={() => setIsEditing(false)}
-                className="flex-1 py-2 bg-surface text-on-surface border border-outline-variant rounded-lg hover:bg-surface-container-low transition-colors duration-150 text-label-md font-label-md"
+                disabled={isSaving}
+                className="px-5 py-2.5 rounded-xl text-on-surface-variant hover:bg-surface-container-low transition-colors text-sm font-medium"
               >
                 Cancel
               </button>
               <button
                 onClick={saveProfile}
-                className="flex-1 py-2 bg-primary text-on-primary rounded-lg hover:bg-on-primary-fixed transition-colors duration-150 text-label-md font-label-md"
+                disabled={isSaving}
+                className="px-6 py-2.5 bg-primary text-on-primary rounded-xl hover:bg-primary/90 shadow-sm transition-all text-sm font-medium flex items-center justify-center min-w-[100px]"
               >
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {isChangingPassword && (
-        <Modal onClose={() => setIsChangingPassword(false)}>
-          <div
-            className="bg-surface rounded-xl shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto"
-            style={{ maxWidth: 480 }}
-          >
-            <div className="flex justify-between items-center p-lg border-b border-outline-variant">
-              <h3 className="text-headline-md font-headline-md text-on-surface">
-                Change Password
-              </h3>
-              <button
-                onClick={() => setIsChangingPassword(false)}
-                className="p-1 rounded-full hover:bg-surface-container-low text-on-surface-variant transition-colors"
-                aria-label="Close"
-              >
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-            <div className="p-lg space-y-md">
-              <div>
-                <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">
-                  Current Password
-                </label>
-                <input
-                  type="password"
-                  value={passwords.current}
-                  onChange={(e) =>
-                    setPasswords({ ...passwords, current: e.target.value })
-                  }
-                  className={inputClass}
-                  placeholder="Enter current password"
-                />
-              </div>
-              <div>
-                <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">
-                  New Password
-                </label>
-                <input
-                  type="password"
-                  value={passwords.new}
-                  onChange={(e) =>
-                    setPasswords({ ...passwords, new: e.target.value })
-                  }
-                  className={inputClass}
-                  placeholder="At least 8 characters"
-                />
-              </div>
-              <div>
-                <label className="block text-label-sm font-label-sm text-on-surface-variant mb-xs">
-                  Confirm New Password
-                </label>
-                <input
-                  type="password"
-                  value={passwords.confirm}
-                  onChange={(e) =>
-                    setPasswords({ ...passwords, confirm: e.target.value })
-                  }
-                  className={inputClass}
-                  placeholder="Re-enter new password"
-                />
-              </div>
-              {passwordError && (
-                <div className="px-sm py-2 bg-error-container text-on-error-container rounded-lg text-label-sm font-label-sm">
-                  {passwordError}
-                </div>
-              )}
-            </div>
-            <div className="p-lg pt-0 flex gap-sm">
-              <button
-                onClick={() => setIsChangingPassword(false)}
-                className="flex-1 py-2 bg-surface text-on-surface border border-outline-variant rounded-lg hover:bg-surface-container-low transition-colors duration-150 text-label-md font-label-md"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={changePassword}
-                className="flex-1 py-2 bg-primary text-on-primary rounded-lg hover:bg-on-primary-fixed transition-colors duration-150 text-label-md font-label-md"
-              >
-                Update Password
+                {isSaving ? (
+                  <div className="w-4 h-4 border-2 border-on-primary border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  "Save"
+                )}
               </button>
             </div>
           </div>
